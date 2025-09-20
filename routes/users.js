@@ -29,7 +29,7 @@ router.post(
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { email, password, role } = req.body;
+    const { email, password, role, name, specialty } = req.body;
 
     try {
       let user = await prisma.user.findUnique({ where: { email } });
@@ -40,6 +40,7 @@ router.post(
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
 
+      // Create user
       user = await prisma.user.create({
         data: {
           email,
@@ -48,7 +49,34 @@ router.post(
         },
       });
 
-      res.json(user);
+      // If role is DOCTOR, also create doctor record
+      if (role === 'DOCTOR') {
+        if (!name || !specialty) {
+          return res.status(400).json({ 
+            msg: 'Name and specialty are required for doctor role' 
+          });
+        }
+
+        const doctor = await prisma.doctor.create({
+          data: {
+            name,
+            email,
+            specialty,
+            userId: user.id,
+          },
+        });
+
+        res.json({
+          user,
+          doctor,
+          message: 'User and doctor created successfully'
+        });
+      } else {
+        res.json({
+          user,
+          message: 'User created successfully'
+        });
+      }
     } catch (err) {
       console.error(err.message);
       res.status(500).send('Server error');

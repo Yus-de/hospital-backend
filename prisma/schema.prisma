@@ -31,6 +31,8 @@ model Doctor {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   appointments  Appointment[]
+  notes         AppointmentNote[]
+  requestedLabs LabRequest[]  @relation("RequestedByDoctor")
 }
 
 model Appointment {
@@ -41,8 +43,60 @@ model Appointment {
   doctor          Doctor    @relation(fields: [doctorId], references: [id])
   appointmentDate DateTime
   reason          String?
+  isPaid          Boolean   @default(false)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+  notes           AppointmentNote[]
+  labRequests     LabRequest[]
+}
+
+model AppointmentNote {
+  id            Int         @id @default(autoincrement())
+  appointmentId Int
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+  doctorId      Int
+  doctor        Doctor      @relation(fields: [doctorId], references: [id])
+  note          String
+  createdAt     DateTime    @default(now())
+}
+
+model LabRequest {
+  id                   Int         @id @default(autoincrement())
+  appointmentId        Int
+  appointment          Appointment @relation(fields: [appointmentId], references: [id])
+  requestedByDoctorId  Int
+  requestedByDoctor    Doctor      @relation("RequestedByDoctor", fields: [requestedByDoctorId], references: [id])
+  priceId              Int
+  price                Price       @relation(fields: [priceId], references: [id])
+  isPaid               Boolean     @default(false)
+  status               LabStatus   @default(REQUESTED)
+  result               String?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+}
+
+enum LabStatus {
+  REQUESTED
+  COMPLETED
+}
+
+model Price {
+  id        Int       @id @default(autoincrement())
+  type      PriceType
+  code      String
+  name      String
+  amount    Float
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  labRequests LabRequest[]
+
+  @@unique([type, code])
+}
+
+enum PriceType {
+  APPOINTMENT
+  LAB
 }
 
 model User {
