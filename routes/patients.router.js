@@ -1,117 +1,26 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-
-const prisma = new PrismaClient();
+const {
+  createPatient,
+  listPatients,
+  getPatientById,
+  updatePatient,
+  deletePatient
+} = require('../controllers/patients.controller');
 
 // Create a new patient
-router.post('/', async (req, res) => {
-  try {
-    const { name, email, phone, address } = req.body;
-    const patient = await prisma.patient.create({
-      data: { name, email, phone, address },
-    });
-    res.json(patient);
-  } catch (error) {
-    console.error('Error creating patient:', error);
-    res.status(500).json({ msg: 'Failed to create patient', error: error.message });
-  }
-});
+router.post('/', createPatient);
 
 // Get all patients
-router.get('/', async (req, res) => {
-  try {
-    const patients = await prisma.patient.findMany({
-      orderBy: { createdAt: 'desc' }
-    });
-    res.json(patients);
-  } catch (error) {
-    console.error('Error fetching patients:', error);
-    res.status(500).json({ msg: 'Failed to fetch patients', error: error.message });
-  }
-});
+router.get('/', listPatients);
 
 // Get patient by ID
-router.get('/:id', async (req, res) => {
-  try {
-    const patientId = Number(req.params.id);
-    if (!Number.isInteger(patientId) || patientId <= 0) {
-      return res.status(400).json({ msg: 'Invalid patient id' });
-    }
-
-    const patient = await prisma.patient.findUnique({
-      where: { id: patientId },
-      include: {
-        appointments: {
-          include: {
-            doctor: true,
-            notes: true,
-            labRequests: {
-              include: {
-                price: true
-              }
-            }
-          }
-        }
-      }
-    });
-
-    if (!patient) {
-      return res.status(404).json({ msg: 'Patient not found' });
-    }
-
-    res.json(patient);
-  } catch (error) {
-    console.error('Error fetching patient:', error);
-    res.status(500).json({ msg: 'Failed to fetch patient', error: error.message });
-  }
-});
+router.get('/:id', getPatientById);
 
 // Update patient
-router.patch('/:id', async (req, res) => {
-  try {
-    const patientId = Number(req.params.id);
-    if (!Number.isInteger(patientId) || patientId <= 0) {
-      return res.status(400).json({ msg: 'Invalid patient id' });
-    }
-
-    const { name, email, phone, address } = req.body;
-    const data = {};
-    
-    if (name) data.name = name;
-    if (email) data.email = email;
-    if (phone) data.phone = phone;
-    if (address) data.address = address;
-
-    const updatedPatient = await prisma.patient.update({
-      where: { id: patientId },
-      data
-    });
-
-    res.json(updatedPatient);
-  } catch (error) {
-    console.error('Error updating patient:', error);
-    res.status(500).json({ msg: 'Failed to update patient', error: error.message });
-  }
-});
+router.patch('/:id', updatePatient);
 
 // Delete patient
-router.delete('/:id', async (req, res) => {
-  try {
-    const patientId = Number(req.params.id);
-    if (!Number.isInteger(patientId) || patientId <= 0) {
-      return res.status(400).json({ msg: 'Invalid patient id' });
-    }
-
-    const deletedPatient = await prisma.patient.delete({
-      where: { id: patientId }
-    });
-
-    res.json(deletedPatient);
-  } catch (error) {
-    console.error('Error deleting patient:', error);
-    res.status(500).json({ msg: 'Failed to delete patient', error: error.message });
-  }
-});
+router.delete('/:id', deletePatient);
 
 module.exports = router;
