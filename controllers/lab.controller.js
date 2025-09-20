@@ -127,6 +127,170 @@ const getAvailableLabExaminations = async (req, res) => {
   } catch (e) { return sendError(res, 500, 'Failed to fetch lab examinations', e); }
 };
 
-module.exports = { createLabRequest, listLabRequests, payLabRequest, submitLabResult, getAvailableLabExaminations };
+const getPaidLabRequests = async (req, res) => {
+  try {
+    const { status, testType } = req.query;
+    
+    // Build where clause for paid lab requests
+    let where = {
+      isPaid: true
+    };
+    
+    // Filter by status if provided
+    if (status && ['REQUESTED', 'COMPLETED'].includes(status)) {
+      where.status = status;
+    }
+    
+    // Filter by test type if provided
+    if (testType) {
+      where.price = {
+        code: {
+          contains: testType,
+          mode: 'insensitive'
+        }
+      };
+    }
+    
+    const paidLabRequests = await prisma.labRequest.findMany({
+      where,
+      include: {
+        price: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            amount: true
+          }
+        },
+        appointment: {
+          include: {
+            patient: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                phone: true
+              }
+            },
+            doctor: {
+              select: {
+                id: true,
+                name: true,
+                specialty: true
+              }
+            }
+          }
+        },
+        requestedByDoctor: {
+          select: {
+            id: true,
+            name: true,
+            specialty: true
+          }
+        }
+      },
+      orderBy: [
+        { status: 'asc' }, // REQUESTED first, then COMPLETED
+        { createdAt: 'desc' }
+      ]
+    });
+    
+    // Add summary information
+    const summary = {
+      total: paidLabRequests.length,
+      requested: paidLabRequests.filter(req => req.status === 'REQUESTED').length,
+      completed: paidLabRequests.filter(req => req.status === 'COMPLETED').length,
+      totalAmount: paidLabRequests.reduce((sum, req) => sum + req.price.amount, 0)
+    };
+    
+    res.json({
+      summary,
+      labRequests: paidLabRequests
+    });
+  } catch (e) { 
+    return sendError(res, 500, 'Failed to fetch paid lab requests', e); 
+  }
+};
 
+const getLabRequestById = async (req, res) => {
+  try {
+    const labRequestId = Number(req.params.id);
+    if (!Number.isInteger(labRequestId) || labRequestId <= 0) {
+      return sendError(res, 400, 'Invalid lab request id');
+    }
 
+    const labRequest = await prisma.labRequest.findUnique({
+      where: { id: labRequestId },
+      include: {
+        price: true,
+        appointment: {
+          include: {
+            patient: true,
+            doctor: true
+          }
+        },
+        requestedByDoctor: true
+      }
+    });
+
+    if (!labRequest) {
+      return sendError(res, 404, 'Lab request not found');
+    }
+
+    if (!labRequest.isPaid) {
+      return sendError(res, 403, 'Lab request is not paid');
+    }
+
+    res.json(labRequest);
+  } catch (e) {
+    return sendError(res, 500, 'Failed to fetch lab request', e);
+  }
+};
+
+const getLabDashboardStats = async (req, res) => {
+  try {
+    const [
+      totalPaidRequests,
+      pendingRequests,
+      completedRequests,
+      todayRequests,
+      todayCompleted
+    ] = await Promise.all([
+      prisma.labRequest.count({ where: { isPaid: true } }),
+      prisma.labRequest.count({ where: { isPaid: true, status: 'REQUESTED' } }),
+      prisma.labRequest.count({ where: { isPaid: true, status: 'COMPLETED' } }),
+      prisma.labRequest.count({
+        where: {
+          isPaid: true,
+          createdAt: {
+            gte: new Date(new Date().setHours(0, 0, 0, 0))
+          }
+        }
+      }),
+      prisma.labRequest.count({
+        where: {
+          isPaid: true,
+          status: 'COMPLETED',
+          updatedAt: {
+            gte: new Date(new Date().setHours(0, 0, 0, 0))
+          }
+        }
+      })
+    ]);
+
+    const stats = {
+      totalPaidRequests,
+      pendingRequests,
+      completedRequests,
+      todayRequests,
+      todayCompleted,
+      completionRate: totalPaidRequests > 0 ? (completedRequests / totalPaidRequests * 100).toFixed(1) : 0
+    };
+
+    res.json(stats);
+  } catch (e) {
+    return sendError(res, 500, 'Failed to fetch dashboard statistics', e);
+  }
+};
+
+module.exports = { createLabRequest, listLabRequests, payLabRequest, submitLabResult, getAvailableLabExaminations, getPaidLabRequests, getLabRequestById, getLabDashboardStats };
