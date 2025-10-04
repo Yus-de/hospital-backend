@@ -38,6 +38,8 @@ app.use('/patients', require('./routes/patients.router'));
 app.use('/doctors', require('./routes/doctors.router'));
 app.use('/cashier', require('./routes/cashier.router'));
 app.use('/admin', require('./routes/admin.router'));
+app.use('/pharmacy', require('./routes/pharmacy.router'));
+app.use('/billing', require('./routes/billing.router'));
 
 // Handle invalid endpoints
 app.use((req, res, next) => {

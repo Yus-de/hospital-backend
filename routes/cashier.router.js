@@ -14,10 +14,10 @@ const {
 router.post('/appointments', auth, requireRole(['CASHIER']), createAppointment);
 
 // Cashier marks an appointment as paid
-router.patch('/appointments/:id/pay', auth, requireRole(['CASHIER']), payAppointment);
+router.post('/appointments/:id/pay', auth, requireRole(['CASHIER']), payAppointment);
 
 // Cashier marks a lab request as paid
-router.patch('/lab-requests/:id/pay', auth, requireRole(['CASHIER']), payLabRequest);
+router.post('/lab-requests/:id/pay', auth, requireRole(['CASHIER']), payLabRequest);
 
 // Get all appointments (for cashier management)
 router.get('/appointments', auth, requireRole(['CASHIER']), listAppointments);

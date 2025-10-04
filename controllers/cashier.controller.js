@@ -1,5 +1,6 @@
 const prisma = require('../prisma/client');
 const { sendError, sendValidationError } = require('../utils/response');
+const { createInvoice, addPayment } = require('./billing.controller');
 
 const createAppointment = async (req, res) => {
   const { patientId, doctorId, appointmentDate, reason, patient } = (req.body || {});
@@ -104,26 +105,60 @@ const payAppointment = async (req, res) => {
   }
 
   try {
-    const existing = await prisma.appointment.findUnique({ where: { id: appointmentId } });
-    if (!existing) {
-      return sendError(res, 404, 'Appointment not found');
-    }
-
-    if (existing.isPaid) {
-      return sendError(res, 400, 'Appointment is already paid');
-    }
-
-    const updated = await prisma.appointment.update({
-      where: { id: appointmentId },
-      data: { isPaid: true },
-      include: {
-        patient: true,
-        doctor: true
+    console.log(`[payAppointment] Starting transaction for appointment ID: ${appointmentId}`);
+    const result = await prisma.$transaction(async (tx) => {
+      // Step 1: Validate the appointment exists and is not already paid.
+      const appointment = await tx.appointment.findUnique({ where: { id: appointmentId } });
+      if (!appointment) {
+        throw new Error('Appointment not found');
       }
+      if (appointment.isPaid) {
+        throw new Error('Appointment is already paid');
+      }
+
+      // Step 2: Find the price for the appointment.
+      const price = await tx.price.findFirst({ where: { type: 'APPOINTMENT' } });
+      if (!price) {
+        throw new Error('Payment failed: Appointment pricing is not configured.');
+      }
+      console.log(`[payAppointment] Found price: ${price.amount}`);
+
+      // Step 3: Mark the appointment as paid.
+      const updatedAppointment = await tx.appointment.update({
+        where: { id: appointmentId },
+        data: { isPaid: true },
+        include: { patient: true, doctor: true },
+      });
+      console.log(`[payAppointment] Marked appointment as paid.`);
+
+      // Step 4: Create the invoice.
+      const newInvoice = await createInvoice({
+        patientId: updatedAppointment.patientId,
+        items: [{ description: `Appointment with ${updatedAppointment.doctor.name}`, amount: price.amount }],
+      }, tx);
+      console.log(`[payAppointment] Created invoice ID: ${newInvoice.id}`);
+
+      // Step 5: Record the payment against the new invoice.
+      const { payment, invoice } = await addPayment({
+        invoiceId: newInvoice.id,
+        amount: price.amount,
+      }, tx);
+      console.log(`[payAppointment] Added payment to invoice ID: ${newInvoice.id}`);
+
+      return { appointment: updatedAppointment, invoice, payment };
     });
-    res.json(updated);
+
+    console.log(`[payAppointment] Transaction successful for appointment ID: ${appointmentId}`);
+    res.json(result);
   } catch (e) {
-    return sendError(res, 400, 'Unable to mark paid', e);
+    console.error('Error in payAppointment transaction:', e);
+    if (e.message === 'Appointment not found') {
+      return sendError(res, 404, e.message);
+    }
+    if (e.message === 'Appointment is already paid') {
+      return sendError(res, 400, e.message);
+    }
+    return sendError(res, 500, e.message || 'Unable to process payment.');
   }
 };
 
@@ -133,25 +168,63 @@ const payLabRequest = async (req, res) => {
     return sendError(res, 400, 'Invalid lab request id');
   }
   try {
-    const existing = await prisma.labRequest.findUnique({ where: { id: labRequestId } });
-    if (!existing) return sendError(res, 404, 'Lab request not found');
-    if (existing.isPaid) return sendError(res, 400, 'Lab request is already paid');
-    const updated = await prisma.labRequest.update({ 
-      where: { id: labRequestId }, 
-      data: { isPaid: true },
-      include: {
-        price: true,
-        appointment: {
-          include: {
-            patient: true,
-            doctor: true
-          }
-        }
+    console.log(`[payLabRequest] Starting transaction for lab request ID: ${labRequestId}`);
+    const result = await prisma.$transaction(async (tx) => {
+      // Step 1: Validate the lab request.
+      const labRequest = await tx.labRequest.findUnique({
+        where: { id: labRequestId },
+        include: { price: true },
+      });
+      if (!labRequest) {
+        throw new Error('Lab request not found');
       }
+      if (labRequest.isPaid) {
+        throw new Error('Lab request is already paid');
+      }
+      if (!labRequest.price) {
+        throw new Error('Payment failed: Lab request price is not configured.');
+      }
+      console.log(`[payLabRequest] Found price: ${labRequest.price.amount}`);
+
+      // Step 2: Mark the lab request as paid.
+      const updatedLabRequest = await tx.labRequest.update({
+        where: { id: labRequestId },
+        data: { isPaid: true },
+        include: {
+          price: true,
+          appointment: { include: { patient: true, doctor: true } },
+        },
+      });
+      console.log(`[payLabRequest] Marked lab request as paid.`);
+
+      // Step 3: Create the invoice.
+      const newInvoice = await createInvoice({
+        patientId: updatedLabRequest.appointment.patientId,
+        items: [{ description: `Lab Test: ${updatedLabRequest.price.name}`, amount: updatedLabRequest.price.amount }],
+      }, tx);
+      console.log(`[payLabRequest] Created invoice ID: ${newInvoice.id}`);
+
+      // Step 4: Record the payment.
+      const { payment, invoice } = await addPayment({
+        invoiceId: newInvoice.id,
+        amount: updatedLabRequest.price.amount,
+      }, tx);
+      console.log(`[payLabRequest] Added payment to invoice ID: ${newInvoice.id}`);
+
+      return { labRequest: updatedLabRequest, invoice, payment };
     });
-    res.json(updated);
+
+    console.log(`[payLabRequest] Transaction successful for lab request ID: ${labRequestId}`);
+    res.json(result);
   } catch (e) {
-    return sendError(res, 500, 'Unable to mark lab request paid', e);
+    console.error('Error in payLabRequest transaction:', e);
+    if (e.message === 'Lab request not found') {
+      return sendError(res, 404, e.message);
+    }
+    if (e.message === 'Lab request is already paid') {
+      return sendError(res, 400, e.message);
+    }
+    return sendError(res, 500, e.message || 'Unable to process lab request payment.');
   }
 };
 

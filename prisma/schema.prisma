@@ -19,6 +19,7 @@ model Patient {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   appointments  Appointment[]
+  invoices      Invoice[]
 }
 
 model Doctor {
@@ -48,6 +49,7 @@ model Appointment {
   updatedAt       DateTime  @updatedAt
   notes           AppointmentNote[]
   labRequests     LabRequest[]
+  prescriptions   Prescription[]
 }
 
 model AppointmentNote {
@@ -118,4 +120,67 @@ enum Role {
   ACCOUNTANT
 }
 
+model Medication {
+  id          Int       @id @default(autoincrement())
+  name        String
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  inventory   Inventory?
+  prescriptions Prescription[]
+}
 
+model Prescription {
+  id            Int         @id @default(autoincrement())
+  appointmentId Int
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+  medicationId  Int
+  medication    Medication  @relation(fields: [medicationId], references: [id])
+  dosage        String
+  frequency     String
+  duration      String
+  isFilled      Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model Inventory {
+  id           Int        @id @default(autoincrement())
+  medicationId Int        @unique
+  medication   Medication @relation(fields: [medicationId], references: [id])
+  quantity     Int
+  lastRestocked DateTime
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model Invoice {
+  id          Int           @id @default(autoincrement())
+  patientId   Int
+  patient     Patient       @relation(fields: [patientId], references: [id])
+  totalAmount Float
+  isPaid      Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  items       InvoiceItem[]
+  payments    Payment[]
+}
+
+model InvoiceItem {
+  id          Int      @id @default(autoincrement())
+  invoiceId   Int
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id])
+  description String
+  amount      Float
+  createdAt   DateTime @default(now())
+}
+
+model Payment {
+  id            Int      @id @default(autoincrement())
+  invoiceId     Int
+  invoice       Invoice  @relation(fields: [invoiceId], references: [id])
+  amount        Float
+  transactionId String   @unique @default(cuid())
+  paymentDate   DateTime @default(now())
+  createdAt     DateTime @default(now())
+}

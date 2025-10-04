@@ -46,13 +46,13 @@ const createUser = async (req, res) => {
         },
       });
 
-      res.json({
+      res.status(201).json({
         user,
         doctor,
         message: 'User and doctor created successfully'
       });
     } else {
-      res.json({
+      res.status(201).json({
         user,
         message: 'User created successfully'
       });
