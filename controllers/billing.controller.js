@@ -69,7 +69,17 @@ const listInvoices = async (req, res) => {
       include: {
         patient: true,
         items: true,
-        payments: true,
+        payments: {
+          include: {
+            cashier: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -91,7 +101,17 @@ const getInvoiceById = async (req, res) => {
       include: {
         patient: true,
         items: true,
-        payments: true,
+        payments: {
+          include: {
+            cashier: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -106,9 +126,9 @@ const getInvoiceById = async (req, res) => {
 };
 
 const addPayment = async (paymentData, prismaClient = prisma) => {
-  const { invoiceId, amount } = paymentData;
+  const { invoiceId, amount, cashierId } = paymentData;
 
-  if (typeof amount !== 'number' || amount <= 0 || !invoiceId) {
+  if (typeof amount !== 'number' || amount <= 0 || !invoiceId || !cashierId) {
     throw new Error('Invalid payment data');
   }
 
@@ -130,6 +150,7 @@ const addPayment = async (paymentData, prismaClient = prisma) => {
     data: {
       invoiceId,
       amount,
+      cashierId,
     },
     select: {
       id: true,
@@ -138,6 +159,13 @@ const addPayment = async (paymentData, prismaClient = prisma) => {
       transactionId: true,
       paymentDate: true,
       createdAt: true,
+      cashier: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
     },
   });
 
@@ -162,6 +190,7 @@ const addPaymentHandler = async (req, res) => {
     const paymentData = {
       invoiceId: Number(req.params.id),
       amount: req.body.amount,
+      cashierId: req.user.id,
     };
     const result = await addPayment(paymentData);
     res.status(201).json(result);

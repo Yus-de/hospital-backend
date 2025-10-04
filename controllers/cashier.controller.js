@@ -142,6 +142,7 @@ const payAppointment = async (req, res) => {
       const { payment, invoice } = await addPayment({
         invoiceId: newInvoice.id,
         amount: price.amount,
+        cashierId: req.user.id,
       }, tx);
       console.log(`[payAppointment] Added payment to invoice ID: ${newInvoice.id}`);
 
@@ -208,6 +209,7 @@ const payLabRequest = async (req, res) => {
       const { payment, invoice } = await addPayment({
         invoiceId: newInvoice.id,
         amount: updatedLabRequest.price.amount,
+        cashierId: req.user.id,
       }, tx);
       console.log(`[payLabRequest] Added payment to invoice ID: ${newInvoice.id}`);
 
