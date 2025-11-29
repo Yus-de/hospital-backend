@@ -20,6 +20,7 @@ model Patient {
   updatedAt     DateTime      @updatedAt
   appointments  Appointment[]
   invoices      Invoice[]
+  patientNotes  PatientNote[]
 }
 
 model Doctor {
@@ -34,6 +35,18 @@ model Doctor {
   appointments  Appointment[]
   notes         AppointmentNote[]
   requestedLabs LabRequest[]  @relation("RequestedByDoctor")
+  patientNotes  PatientNote[]
+}
+
+model PatientNote {
+  id            Int      @id @default(autoincrement())
+  patientId     Int
+  patient       Patient  @relation(fields: [patientId], references: [id])
+  doctorId      Int
+  doctor        Doctor   @relation(fields: [doctorId], references: [id])
+  note          String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model Appointment {

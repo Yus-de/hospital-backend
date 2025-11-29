@@ -323,6 +323,219 @@ const getPatientLabResults = async (req, res) => {
    }
 };
 
+const getDoctorPatientById = async (req, res) => {
+  const patientId = Number(req.params.patientId);
+
+  if (!Number.isInteger(patientId) || patientId <= 0) {
+    return sendValidationError(res, 'Invalid patient ID', { patientId: 'positive integer' });
+  }
+
+  try {
+    const doctor = await prisma.doctor.findUnique({ where: { userId: req.user.id } });
+    if (!doctor) {
+      return sendError(res, 404, 'Doctor profile not found');
+    }
+
+    // Verify the doctor is associated with the patient through a paid appointment
+    const appointment = await prisma.appointment.findFirst({
+      where: {
+        doctorId: doctor.id,
+        patientId: patientId,
+        isPaid: true
+      },
+      include: {
+        patient: true
+      }
+    });
+
+    if (!appointment) {
+      return sendError(res, 403, 'Not authorized to view this patient or patient not found for this doctor.');
+    }
+
+    // Return the patient details
+    res.json(appointment.patient);
+
+  } catch (e) {
+    console.error('Error fetching patient by ID for doctor:', e);
+    return sendError(res, 500, 'Failed to fetch patient details.');
+  }
+};
+
+const createPatientNote = async (req, res) => {
+  const patientId = Number(req.params.patientId);
+  const { note } = req.body;
+
+  if (!Number.isInteger(patientId) || patientId <= 0) {
+    return sendValidationError(res, 'Invalid patient ID', { patientId: 'positive integer' });
+  }
+  if (!note || typeof note !== 'string' || note.trim().length === 0) {
+    return sendValidationError(res, 'Invalid note content', { note: 'non-empty string' });
+  }
+
+  try {
+    const doctor = await prisma.doctor.findUnique({ where: { userId: req.user.id } });
+    if (!doctor) {
+      return sendError(res, 404, 'Doctor profile not found');
+    }
+
+    // Verify the doctor is associated with the patient through a paid appointment
+    const hasAppointmentWithPatient = await prisma.appointment.count({
+      where: {
+        doctorId: doctor.id,
+        patientId: patientId,
+        isPaid: true
+      },
+    });
+
+    if (hasAppointmentWithPatient === 0) {
+      return sendError(res, 403, 'Not authorized to create a note for this patient.');
+    }
+
+    const patientNote = await prisma.patientNote.create({
+      data: {
+        patientId,
+        doctorId: doctor.id,
+        note: note.trim(),
+      },
+      include: {
+        patient: {
+          select: { id: true, name: true }
+        },
+        doctor: {
+          select: { id: true, name: true, specialty: true }
+        }
+      }
+    });
+
+    res.status(201).json(patientNote);
+
+  } catch (e) {
+    console.error('Error creating patient note:', e);
+    return sendError(res, 500, 'Failed to create patient note.');
+  }
+};
+
+const updatePatientNote = async (req, res) => {
+  const patientId = Number(req.params.patientId);
+  const noteId = Number(req.params.noteId);
+  const { note } = req.body;
+
+  if (!Number.isInteger(patientId) || patientId <= 0) {
+    return sendValidationError(res, 'Invalid patient ID', { patientId: 'positive integer' });
+  }
+  if (!Number.isInteger(noteId) || noteId <= 0) {
+    return sendValidationError(res, 'Invalid note ID', { noteId: 'positive integer' });
+  }
+  if (!note || typeof note !== 'string' || note.trim().length === 0) {
+    return sendValidationError(res, 'Invalid note content', { note: 'non-empty string' });
+  }
+
+  try {
+    const doctor = await prisma.doctor.findUnique({ where: { userId: req.user.id } });
+    if (!doctor) {
+      return sendError(res, 404, 'Doctor profile not found');
+    }
+
+    // Find the patient note and ensure it belongs to this doctor and patient
+    const existingNote = await prisma.patientNote.findUnique({
+      where: {
+        id: noteId,
+        patientId: patientId,
+        doctorId: doctor.id
+      }
+    });
+
+    if (!existingNote) {
+      return sendError(res, 404, 'Patient note not found or not authorized to update.');
+    }
+
+    const updatedNote = await prisma.patientNote.update({
+      where: {
+        id: noteId
+      },
+      data: {
+        note: note.trim(),
+      },
+      include: {
+        patient: {
+          select: { id: true, name: true }
+        },
+        doctor: {
+          select: { id: true, name: true, specialty: true }
+        }
+      }
+    });
+
+    res.json(updatedNote);
+
+  } catch (e) {
+    console.error('Error updating patient note:', e);
+    return sendError(res, 500, 'Failed to update patient note.');
+  }
+};
+
+const listPatientNotes = async (req, res) => {
+  const patientId = Number(req.params.patientId);
+
+  if (!Number.isInteger(patientId) || patientId <= 0) {
+    return sendValidationError(res, 'Invalid patient ID', { patientId: 'positive integer' });
+  }
+
+  try {
+    const doctor = await prisma.doctor.findUnique({ where: { userId: req.user.id } });
+    if (!doctor) {
+      return sendError(res, 404, 'Doctor profile not found');
+    }
+
+    // Verify the doctor is associated with the patient through a paid appointment
+    const hasAppointmentWithPatient = await prisma.appointment.count({
+      where: {
+        doctorId: doctor.id,
+        patientId: patientId,
+        isPaid: true
+      },
+    });
+
+    if (hasAppointmentWithPatient === 0) {
+      return sendError(res, 403, 'Not authorized to view notes for this patient.');
+    }
+    console.log(`[DEBUG listPatientNotes] Doctor ID: ${doctor.id}, Patient ID: ${patientId}`);
+
+    // Verify the doctor is associated with the patient through a paid appointment
+    const isAuthorized = await prisma.appointment.count({
+      where: {
+        doctorId: doctor.id,
+        patientId: patientId,
+        isPaid: true
+      },
+    });
+    console.log(`[DEBUG listPatientNotes] Doctor has paid appointment with patient: ${isAuthorized > 0}`);
+
+    if (isAuthorized === 0) {
+      return sendError(res, 403, 'Not authorized to view notes for this patient.');
+    }
+
+    const patientNotes = await prisma.patientNote.findMany({
+      where: {
+        patientId: patientId,
+        doctorId: doctor.id
+      },
+      include: {
+        doctor: {
+          select: { id: true, name: true, specialty: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    console.log(`[DEBUG listPatientNotes] Fetched ${patientNotes.length} patient notes.`);
+    res.json(patientNotes);
+
+  } catch (e) {
+    console.error('[ERROR] listPatientNotes:', e);
+    return sendError(res, 500, 'Failed to retrieve patient notes.');
+  }
+};
+
 module.exports = {
   createDoctor,
   listDoctors,
@@ -331,5 +544,9 @@ module.exports = {
   createLabRequest,
   listLabExaminations,
   listLabRequests,
-  getPatientLabResults
+  getPatientLabResults,
+  getDoctorPatientById,
+  createPatientNote,
+  updatePatientNote,
+  listPatientNotes
 };

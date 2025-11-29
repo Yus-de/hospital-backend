@@ -9,7 +9,11 @@ const {
   createLabRequest,
   listLabExaminations,
   listLabRequests,
-  getPatientLabResults
+  getPatientLabResults,
+  getDoctorPatientById,
+  createPatientNote,
+  updatePatientNote,
+  listPatientNotes
 } = require('../controllers/doctors.controller');
 
 // Create a new doctor
@@ -35,5 +39,17 @@ router.get('/lab-requests', auth, requireRole(['DOCTOR']), listLabRequests);
 
 // Get a patient's lab results for a specific doctor
 router.get('/patients/:patientId/lab-results', auth, requireRole(['DOCTOR']), getPatientLabResults);
+
+// Get a patient by ID for a specific doctor
+router.get('/patients/:patientId', auth, requireRole(['DOCTOR']), getDoctorPatientById);
+
+// Doctor creates a note for a patient
+router.post('/patients/:patientId/notes', auth, requireRole(['DOCTOR']), createPatientNote);
+
+// Doctor updates a note for a patient
+router.put('/patients/:patientId/notes/:noteId', auth, requireRole(['DOCTOR']), updatePatientNote);
+
+// Doctor gets all notes for a specific patient
+router.get('/patients/:patientId/notes', auth, requireRole(['DOCTOR']), listPatientNotes);
 
 module.exports = router;
