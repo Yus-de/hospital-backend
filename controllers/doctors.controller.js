@@ -235,6 +235,94 @@ const listLabRequests = async (req, res) => {
   }
 };
 
+const getPatientLabResults = async (req, res) => {
+  const patientId = Number(req.params.patientId);
+
+  if (!Number.isInteger(patientId) || patientId <= 0) {
+    return sendValidationError(res, 'Invalid patient ID', { patientId: 'positive integer' });
+  }
+
+  try {
+    const doctor = await prisma.doctor.findUnique({ where: { userId: req.user.id } });
+    if (!doctor) {
+      return sendError(res, 404, 'Doctor profile not found');
+    }
+
+    console.log(`[DEBUG] Doctor ID: ${doctor.id}`);
+    console.log(`[DEBUG] Patient ID: ${patientId}`);
+
+    // Verify the doctor is associated with the patient through an appointment
+    const hasAppointmentWithPatient = await prisma.appointment.count({
+      where: {
+        doctorId: doctor.id,
+        patientId: patientId,
+        isPaid: true, // Only consider paid appointments for result access
+      },
+    });
+
+    console.log(`[DEBUG] Doctor has paid appointment with patient: ${hasAppointmentWithPatient > 0}`);
+
+    if (hasAppointmentWithPatient === 0) {
+      return sendError(res, 403, 'Not authorized to view lab results for this patient');
+    }
+
+    // Get lab requests for the specific patient and doctor, which are paid and completed
+    const labResults = await prisma.labRequest.findMany({
+      where: {
+        appointment: {
+          patientId: patientId,
+          doctorId: doctor.id
+        },
+        isPaid: true,
+        status: 'COMPLETED'
+      },
+      include: {
+        price: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            amount: true
+          }
+        },
+        appointment: {
+          include: {
+            patient: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                phone: true
+              }
+            },
+            doctor: {
+              select: {
+                id: true,
+                name: true,
+                specialty: true
+              }
+            }
+          }
+        },
+        requestedByDoctor: {
+          select: {
+            id: true,
+            name: true,
+            specialty: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    console.log(`[DEBUG] Lab Results: ${JSON.stringify(labResults, null, 2)}`); // Log the fetched lab results
+    console.log(`[DEBUG] Lab Results: ${JSON.stringify(labResults, null, 2)}`); // Log the fetched lab results
+    res.json(labResults);
+  } catch (e) {
+    console.error('Error fetching patient lab results:', e);
+   }
+};
+
 module.exports = {
   createDoctor,
   listDoctors,
@@ -242,5 +330,6 @@ module.exports = {
   addAppointmentNote,
   createLabRequest,
   listLabExaminations,
-  listLabRequests
+  listLabRequests,
+  getPatientLabResults
 };

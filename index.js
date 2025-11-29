@@ -22,7 +22,7 @@ const sendValidationError = (res, msg, requirements) => {
 
 app.use(
   cors({
-    origin: "http://localhost:3000", // frontend URL
+    origin: process.env.FRONTEND_URL, // frontend URL
     credentials: true, // allow cookies if needed
   })
 );

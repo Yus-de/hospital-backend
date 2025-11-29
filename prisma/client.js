@@ -8,6 +8,8 @@ if (!global.__PRISMA_CLIENT__) {
 
 prisma = global.__PRISMA_CLIENT__;
 
+
+
 module.exports = prisma;
 
 
