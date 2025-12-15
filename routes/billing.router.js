@@ -10,7 +10,7 @@ const {
 
 // Invoice routes
 router.post('/invoices', auth, requireRole(['ACCOUNTANT', 'CASHIER']), createInvoiceHandler);
-router.get('/invoices', auth, requireRole(['ACCOUNTANT', 'CASHIER']), listInvoices);
+router.get('/invoices', auth, requireRole(['ACCOUNTANT', 'CASHIER', 'ADMIN']), listInvoices);
 router.get('/invoices/:id', auth, requireRole(['ACCOUNTANT', 'CASHIER']), getInvoiceById);
 
 // Payment routes
