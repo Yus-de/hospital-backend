@@ -82,7 +82,7 @@ model LabRequest {
   requestedByDoctorId  Int
   requestedByDoctor    Doctor      @relation("RequestedByDoctor", fields: [requestedByDoctorId], references: [id])
   priceId              Int
-  price                Price       @relation(fields: [priceId], references: [id])
+    price   Price    @relation(fields: [priceId], references: [id], onDelete: Cascade)
   isPaid               Boolean     @default(false)
   status               LabStatus   @default(REQUESTED)
   result               String?
