@@ -1,46 +1,58 @@
 const jwt = require('jsonwebtoken');
 
 const auth = (req, res, next) => {
-  let token = req.header('x-auth-token');
+  let token;
 
-  if (!token) {
-    const authHeader = req.header('Authorization');
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.substring(7, authHeader.length);
-    }
-  }
-  
-  console.log('Token:', token);
+    // Priority: Authorization Bearer token
+      const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            token = authHeader.split(' ')[1];
+              }
 
-  if (!token) {
-    return res.status(401).json({ msg: 'No token, authorization denied' });
-  }
+                // Fallback: HttpOnly cookie (recommended)
+                  if (!token && req.cookies?.accessToken) {
+                      token = req.cookies.accessToken;
+                        }
 
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded.user;
-    console.log('Decoded user:', req.user);
-    next();
-  } catch (err) {
-    console.error('Token verification error:', err.message);
-    res.status(401).json({ msg: 'Token is not valid' });
-  }
-};
+                          if (!token) {
+                              return res.status(401).json({ message: 'Authentication required' });
+                                }
 
-const admin = (req, res, next) => {
-  console.log('Admin middleware, user role:', req.user.role);
-  if (req.user.role !== 'ADMIN') {
-    return res.status(403).json({ msg: 'Access denied' });
-  }
-  next();
-};
+                                  try {
+                                      const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-const requireRole = (roles) => (req, res, next) => {
-  const allowedRoles = Array.isArray(roles) ? roles : [roles];
-  if (!req.user || !allowedRoles.includes(req.user.role)) {
-    return res.status(403).json({ msg: 'Access denied' });
-  }
-  next();
-};
+                                          // Attach minimal user info only
+                                              req.user = {
+                                                    id: decoded.user.id,
+                                                          role: decoded.user.role,
+                                                              };
 
-module.exports = { auth, admin, requireRole };
+                                                                  // Safe audit log
+                                                                      console.log(
+                                                                            `AUTH | user=${req.user.id} | role=${req.user.role} | ip=${req.ip}`
+                                                                                );
+
+                                                                                    next();
+                                                                                      } catch (error) {
+                                                                                          console.error('JWT validation failed:', error.message);
+                                                                                              return res.status(401).json({ message: 'Invalid or expired token' });
+                                                                                                }
+                                                                                                };
+
+                                                                                                const admin = (req, res, next) => {
+                                                                                                  if (!req.user || req.user.role !== 'ADMIN') {
+                                                                                                      return res.status(403).json({ message: 'Admin access only' });
+                                                                                                        }
+                                                                                                          next();
+                                                                                                          };
+
+                                                                                                          const requireRole = (roles) => (req, res, next) => {
+                                                                                                            const allowed = Array.isArray(roles) ? roles : [roles];
+
+                                                                                                              if (!req.user || !allowed.includes(req.user.role)) {
+                                                                                                                  return res.status(403).json({ message: 'Access denied' });
+                                                                                                                    }
+                                                                                                                      next();
+                                                                                                                      };
+
+                                                                                                                      module.exports = { auth, admin, requireRole };
